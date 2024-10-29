@@ -6,6 +6,11 @@ org BOOT_ADDR
 
 section .text               ; Code section
 
+%ifdef DEBUG
+    ; Add the bytes '1', '2', '3', and '4' at the beginning of the file
+    db '1234'
+%endif
+
 start:
 %ifdef DEBUG
     ; Display 'A' for application stage

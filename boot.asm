@@ -60,6 +60,19 @@ disksuccess:
 %endif
 
 %ifdef DEBUG
+    ; To check if we have loaded the data correctly we read and display the first four bytes of the application
+    mov si, LOAD_ADDR       ; Destination address in memory for the load
+    mov cx, 4               ; Four bytes
+print:
+    mov al, [si]            ; load byte into al
+    mov ah, 0x0e            ; Teletype output
+    int 0x10                ; Video BIOS services
+
+    inc si                  ; Next byte
+    loop print              ; Jump to 'print' label if more bytes to print
+%endif
+
+%ifdef DEBUG
     ; Display 'J' for jumping stage
     mov ah, 0x0e            ; Teletype output
     mov al, 'J'             
