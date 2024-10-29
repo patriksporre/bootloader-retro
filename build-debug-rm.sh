@@ -1,6 +1,6 @@
 # File paths
 BOOTLOADER="boot.bin"
-APPLICATION="application-bin.bin"
+APPLICATION="application-rm.bin"
 FLOPPY_IMAGE="floppy.img"
 
 # Clean up previous builds
