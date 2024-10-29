@@ -1,6 +1,6 @@
 # File paths
 BOOTLOADER="boot.bin"
-APPLICATION="application.bin"
+APPLICATION="application-rm.bin"
 FLOPPY_IMAGE="floppy.img"
 
 # Clean up previous builds
@@ -9,8 +9,8 @@ rm -f "$FLOPPY_IMAGE" "$BOOTLOADER" "$APPLICATION"
 
 # Assemble bootloader and application
 echo "Assembling bootloader and application..."
-nasm -f bin -DDEBUG boot.asm -o "$BOOTLOADER" || { echo "Bootloader assembly failed"; exit 1; }
-nasm -f bin -DDEBUG application.asm -o "$APPLICATION" || { echo "Application assembly failed"; exit 1; }
+nasm -f bin boot.asm -o "$BOOTLOADER" || { echo "Bootloader assembly failed"; exit 1; }
+nasm -f bin application-rm.asm -o "$APPLICATION" || { echo "Application assembly failed"; exit 1; }
 
 # Create a blank 1.44 MB floppy disk image (2880 sectors)
 dd if=/dev/zero of="$FLOPPY_IMAGE" bs=512 count=2880
