@@ -1,7 +1,13 @@
 
 %define BOOT_ADDR   0x7c00  ; This is where BIOS loads the bootloader
-%define LOAD_ADDR   0x9000  ; Destination address in memory for the application
+%define LOAD_ADDR   0x8000  ; Destination address in memory for the application
 %define SECTORS     0x01    ; # sectors to read
+
+; Our memory is mapped with the following approach:
+;   0x7c00 - 0x7fff: Our bootloader (1024 bytes)
+;   0x8000 - 0x8fff: Our application code (4096 bytes)
+;   0x9000 - 0x9fff: Our back buffer
+;   0xa000 - 0xafff: Video memory 
 
 bits 16
 org BOOT_ADDR
