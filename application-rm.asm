@@ -251,67 +251,45 @@ unchained_flip:
     mov ds, ax               ; Set DS to the back buffer segment
 
     ; Set up video memory segment
-    mov ax, VIDEO_ADDR           ; VGA video memory segment
+    mov ax, VIDEO_ADDR       ; VGA video memory segment
     mov es, ax               ; Set ES to the video memory segment
 
-    ; Initialize index and loop counter
-    xor di, di               ; Reset destination index (ES:DI)
-    xor si, si               ; Reset source index (DS:SI)
-
-    ; Loop through each plane
-    mov cx, 16000            ; 320 * 200 / 4 = 16000 bytes per plane
-
-    ; Plane 0
+    ; Set up the VGA sequencer to the Map Mask register once
     mov dx, 0x03C4           ; VGA sequencer address register
     mov al, 0x02             ; Map Mask Register index
     out dx, al               ; Select Map Mask register
-    inc dx                   ; Data register (0x03C5)
-    mov al, 0x01             ; Plane 0 mask (00000001b)
-    out dx, al               ; Set the plane mask
-plane0_loop:
-    mov al, [ds:si]          ; Load byte from back buffer
-    mov [es:di], al          ; Write to video memory plane 0
-    add si, 4                ; Move to the next pixel in the back buffer
-    inc di                   ; Move to the next byte in video memory
-    loop plane0_loop
+    inc dx                   ; Increment to data register (0x03C5)
 
-    ; Plane 1
-    mov si, 1                ; Start with offset 1 in the back buffer for plane 1
-    mov di, 0                ; Reset destination index
-    mov cx, 16000            ; Reset loop counter for plane 1
-    mov al, 0x02             ; Plane 1 mask (00000010b)
-    out dx, al               ; Set the plane mask
-plane1_loop:
-    mov al, [ds:si]          ; Load byte from back buffer
-    mov [es:di], al          ; Write to video memory plane 1
-    add si, 4                ; Move to the next pixel in the back buffer
-    inc di                   ; Move to the next byte in video memory
-    loop plane1_loop
+    ; Initialize main loop for copying planes
+    xor cx, cx               ; Start plane counter (cx = 0)
+    
+plane_copy_loop:
+    ; Set the plane mask based on current plane
+    mov al, 1
+    shl al, cl               ; Shift left by cl to set mask for the plane (1, 2, 4, 8)
+    out dx, al               ; Apply the plane mask to VGA
 
-    ; Plane 2
-    mov si, 2                ; Start with offset 2 in the back buffer for plane 2
-    mov di, 0                ; Reset destination index
-    mov cx, 16000            ; Reset loop counter for plane 2
-    mov al, 0x04             ; Plane 2 mask (00000100b)
-    out dx, al               ; Set the plane mask
-plane2_loop:
-    mov al, [ds:si]          ; Load byte from back buffer
-    mov [es:di], al          ; Write to video memory plane 2
-    add si, 4                ; Move to the next pixel in the back buffer
-    inc di                   ; Move to the next byte in video memory
-    loop plane2_loop
+    ; Set `si` to the start of the correct plane in the back buffer
+    mov si, cx               ; Offset by plane (cx = plane index)
+    mov di, 0
+   
+    ; Copy 16000 bytes for the current plane
+    push cx                  ; Save plane counter
+    mov cx, 16000            ; Set loop count for 16000 bytes per plane
 
-    ; Plane 3
-    mov si, 3                ; Start with offset 3 in the back buffer for plane 3
-    mov di, 0                ; Reset destination index
-    mov cx, 16000            ; Reset loop counter for plane 3
-    mov al, 0x08             ; Plane 3 mask (00001000b)
-    out dx, al               ; Set the plane mask
-plane3_loop:
+plane_copy_pixels:
+    ; Copy every fourth byte from back buffer to video memory for current plane
     mov al, [ds:si]          ; Load byte from back buffer
-    mov [es:di], al          ; Write to video memory plane 3
+    mov [es:di], al          ; Write to video memory at current plane
     add si, 4                ; Move to the next pixel in the back buffer
     inc di                   ; Move to the next byte in video memory
-    loop plane3_loop
+    loop plane_copy_pixels
+
+    pop cx                   ; Restore plane counter
+
+    ; Move to the next plane
+    inc cl                   ; Increment plane counter
+    cmp cl, 4                ; Check if all 4 planes are done
+    jl  plane_copy_loop      ; Repeat until all planes are copied
 
     ret
