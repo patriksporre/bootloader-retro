@@ -31,6 +31,7 @@ start:
     mov al, VIDEO_MODE      ; Video mode
     int 0x10                ; Video BIOS services
 
+    ; Configure VGA for unchained mode
     call unchained_vga_mode
 
     ; Set up the grayscale palette
@@ -38,19 +39,22 @@ start:
 
 ; Main rendering loop of our application
 main:
-    ;call unchained_vga_clear
+    ; Clear the video memory in unchained mode
+    ; call unchained_vga_clear
 
     ; Clear back buffer
-    ;call clear_back_buffer
+    ; call clear_back_buffer
 
-    ; Render XOR pattern
+    ; Render XOR pattern to back buffer
     call render_xor_pattern
 
     ; Wait for VBlank
     call wait_for_vblank
 
-    ; Flip the back buffer
-    ;call flip_backbuffer
+    ; Flip the back buffer in linear mode
+    ; call flip_backbuffer
+    
+    ; Flip the back buffer in unchained mode
     call unchained_flip
 
     jmp main
@@ -58,8 +62,7 @@ main:
 ; -------------- Functions --------------
 
 ; Function: set_grayscale_palette
-; Description: Generates a grayscale palette
-; Register used: AX, CX, DX
+; Description: Generates a grayscale palette in 256 colors
 set_grayscale_palette:
     mov dx, 0x3c8           ; Set color index register
     xor ax, ax              ; Start at color index 0
@@ -83,22 +86,20 @@ grayscale_palette:
     ret
 
 ; Function: clear_back_buffer
-; Description: Clears the back buffer by filling it with the background color
-; Registers used: AX, CX, DI, ES
+; Description: Clears the back buffer with the background color
 clear_back_buffer:
-    mov ax, BUFFER_ADDR     ; Set ES to back buffer
+    mov ax, BUFFER_ADDR     
     mov es, ax              ; Set ES (extra segment) to BUFFER_ADDR
 
     xor di, di              ; Start at the beginning of the buffer
     mov al, BACKGROUND      ; AL holds the index to the color in the palette
-    mov cx, WIDTH * HEIGHT  ; 
+    mov cx, WIDTH * HEIGHT  
     rep stosb
 
     ret
 
 ; Function: render_xor_pattern
-; Description: Renders an XOR pattern all over the back buffer
-; Registers used: AX, BX, CX, DI, ES
+; Description: RRenders an XOR pattern to the back buffer for visual testing
 render_xor_pattern:
     mov ax, BUFFER_ADDR     ; Set ES to back buffer
     mov es, ax
@@ -126,8 +127,7 @@ x_loop:
     ret
 
 ; Function: wait_for_vblank
-; Description: Waits for vertical blank to prevent screen tearing
-; Registers used: AX, DX
+; Description: Waits for the start and end of the vertical blanking interval
 wait_for_vblank:
     mov dx, 0x03da          ; VGA status register
 wait_vsync:
@@ -143,7 +143,6 @@ wait_not_vsync:
 
 ; Function: flip_backbuffer
 ; Description: Copies back buffer to video memory
-; Registers used: CX, DI, DS, ES, SI
 flip_backbuffer:
     mov ax, BUFFER_ADDR     
     mov ds, ax              ; Set DS (data segment) to BUFFER_ADDR
@@ -158,6 +157,8 @@ flip_backbuffer:
 
     ret
 
+; Function: unchained_vga_mode
+; Description: Configures VGA to unchained mode for planar graphics
 unchained_vga_mode:
     ; Unchain the VGA memory
     mov dx, 0x03c4          ; Sequencer address register (0x03c4)
@@ -220,76 +221,74 @@ unchained_vga_mode:
 
     ret
 
-
-
+; Function: unchained_vga_clear
+; Description: Clears all four VGA planes in unchained mode
 unchained_vga_clear:
-    ; Set up the Map Mask register to select all planes
-    mov dx, 0x03c4          ; VGA sequencer address register
-    mov ax, 0x0F02          ; Select Map Mask register, enable all planes
-    out dx, ax              ; Set all planes for simultaneous write
+    ; Set up the map mask register to select all planes
+    mov dx, 03c4h           ; Sequencer address register (0x03c4)
+    mov al, 0x02            ; Set map mask register index (0x02)
+    out dx, al              
 
-    ; Set up segment for video memory
-    mov ax, 0xA000          ; VGA video memory segment
+    inc dx                  ; Sequence data register (0x03c5)
+    mov al, 00001111b       ; Enable all planes by setting bits 0-3
+    out dx, al            
+
+    mov ax, VIDEO_ADDR      ; Set ES (extra segment) to VIDEO_ADDR
     mov es, ax
 
-    ; Clear screen with the provided color
-    xor di, di              ; Start at the beginning of VGA memory
-    mov cx, 32000           ; Only 16,000 writes are needed for 320x200 pixels in Mode X
-    mov ax, 0x0001
-    rep stosb               ; Write color in AL across the screen
+    mov al, 0x01            ; Set color to palette color 1
+    xor di, di              ; Start from top left corner
+    mov cx, 16000           ; Write 16000 bytes
+paint:
+    mov byte [es:di], al
+    inc di
+    loop paint
 
     ret
 
-
-
-
-
-
+; Function: unchained_flip
+; Description: Copies the back buffer to video memory in planar mode
 unchained_flip:
-    ; Set up the back buffer segment
-    mov ax, BUFFER_ADDR      ; Address of the back buffer
-    mov ds, ax               ; Set DS to the back buffer segment
+    mov ax, BUFFER_ADDR      
+    mov ds, ax              ; Set DS to the back buffer segment
 
-    ; Set up video memory segment
-    mov ax, VIDEO_ADDR       ; VGA video memory segment
-    mov es, ax               ; Set ES to the video memory segment
+    mov ax, VIDEO_ADDR       
+    mov es, ax              ; Set ES to the video memory segment
 
-    ; Set up the VGA sequencer to the Map Mask register once
-    mov dx, 0x03C4           ; VGA sequencer address register
-    mov al, 0x02             ; Map Mask Register index
-    out dx, al               ; Select Map Mask register
-    inc dx                   ; Increment to data register (0x03C5)
+    ; Set up the map mask register
+    mov dx, 0x03c4          ; Sequencer address register (0x03c4)
+    mov al, 0x02            ; Set map mask register index (0x02)
+    out dx, al               
 
-    ; Initialize main loop for copying planes
-    xor cx, cx               ; Start plane counter (cx = 0)
+    inc dx                  ; Sequence data register (0x03c5)
+
+    ; Initialize plane loop
+    xor cx, cx              ; Start plane counter (CX = 0)
     
 plane_copy_loop:
-    ; Set the plane mask based on current plane
-    mov al, 1
-    shl al, cl               ; Shift left by cl to set mask for the plane (1, 2, 4, 8)
-    out dx, al               ; Apply the plane mask to VGA
+    ; Set plane mask by shifting '1' left by 'CL' (plane number)
+    mov al, 0x01
+    shl al, cl              ; Set the mask for the current plane (1, 2, 4, 8)
+    out dx, al              ; Apply the plane mask
 
-    ; Set `si` to the start of the correct plane in the back buffer
-    mov si, cx               ; Offset by plane (cx = plane index)
-    mov di, 0
-   
+    ; Set 'SI' to the start of the correct plane in the back buffer
+    mov si, cx              ; Offset by plane (CX = plane index)
+    xor di, di              ; Reset destination index for each plane
+
     ; Copy 16000 bytes for the current plane
-    push cx                  ; Save plane counter
-    mov cx, 16000            ; Set loop count for 16000 bytes per plane
-
+    mov bx, 16000           ; Set BX to copy 16000 bytes
+    
 plane_copy_pixels:
-    ; Copy every fourth byte from back buffer to video memory for current plane
-    mov al, [ds:si]          ; Load byte from back buffer
-    mov [es:di], al          ; Write to video memory at current plane
-    add si, 4                ; Move to the next pixel in the back buffer
-    inc di                   ; Move to the next byte in video memory
-    loop plane_copy_pixels
+    mov al, [ds:si]         ; Load byte from back buffer
+    mov [es:di], al         ; Write to video memory plane
+    add si, 4               ; Skip four wo pixels in the back buffer
+    inc di                  ; Advance by one byte in video memory
 
-    pop cx                   ; Restore plane counter
+    dec bx                  ; Decrement bx counter
+    jnz plane_copy_pixels   ; Repeat until 16000 bytes are copied
 
-    ; Move to the next plane
-    inc cl                   ; Increment plane counter
-    cmp cl, 4                ; Check if all 4 planes are done
-    jl  plane_copy_loop      ; Repeat until all planes are copied
+    inc cl                  ; Increment plane counter
+    cmp cl, 4               ; Check if all 4 planes are done
+    jl  plane_copy_loop     ; Repeat until all planes are copied
 
     ret
